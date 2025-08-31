@@ -1,0 +1,270 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Wiki</title>
+    <style>
+        body {
+            font-family: 'Linux Libertine', 'Georgia', 'Times', serif;
+            margin: 0;
+            background-color: #f8f9fa;
+            color: #202122;
+        }
+        #container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+        }
+        #sidebar {
+            width: 200px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #c8ccd1;
+        }
+        #sidebar h2 {
+            font-size: 14px;
+            font-weight: bold;
+            margin: 10px 0 5px;
+        }
+        #sidebar a {
+            display: block;
+            color: #0645ad;
+            text-decoration: none;
+            font-size: 13px;
+            padding: 2px 5px;
+        }
+        #sidebar a:hover {
+            background-color: #eaecf0;
+            text-decoration: underline;
+        }
+        #content {
+            flex: 1;
+            padding: 20px;
+            background-color: #fff;
+            min-height: 600px;
+            border: 1px solid #a2a9b1;
+        }
+        #header {
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #c8ccd1;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #header h1 {
+            font-size: 18px;
+            margin: 0;
+        }
+        #nav a {
+            margin-left: 15px;
+            color: #0645ad;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        #nav a:hover {
+            text-decoration: underline;
+        }
+        #viewContent h1 {
+            font-size: 28px;
+            border-bottom: 1px solid #a2a9b1;
+            padding-bottom: 5px;
+        }
+        #viewContent p {
+            line-height: 1.6;
+        }
+        #editForm {
+            display: none;
+        }
+        #pageTitle {
+            width: 100%;
+            padding: 5px;
+            font-size: 16px;
+            margin-bottom: 10px;
+            border: 1px solid #a2a9b1;
+        }
+        #pageContent {
+            width: 100%;
+            height: 400px;
+            font-family: monospace;
+            font-size: 14px;
+            border: 1px solid #a2a9b1;
+            padding: 5px;
+        }
+        .edit-buttons {
+            margin-top: 10px;
+        }
+        .edit-buttons button {
+            background-color: #36c;
+            color: #fff;
+            border: 1px solid #2a4b8d;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            margin-right: 10px;
+        }
+        .edit-buttons button.cancel {
+            background-color: #f8f9fa;
+            color: #202122;
+            border: 1px solid #a2a9b1;
+        }
+        .page-list li {
+            margin-bottom: 5px;
+        }
+        .page-list a {
+            color: #0645ad;
+            text-decoration: none;
+        }
+        .page-list a:hover {
+            text-decoration: underline;
+        }
+        #editLink {
+            font-size: 13px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1>Simple Wiki</h1>
+        <div id="nav">
+            <a href="#" onclick="showMainPage()">Main page</a>
+            <a href="#" onclick="listPages()">All pages</a>
+            <a href="#" onclick="showEditForm('new')">Create page</a>
+        </div>
+    </div>
+    <div id="container">
+        <div id="sidebar">
+            <h2>Navigation</h2>
+            <a href="#" onclick="showMainPage()">Main page</a>
+            <a href="#" onclick="listPages()">All pages</a>
+            <h2>Tools</h2>
+            <a href="#" onclick="showEditForm('new')">Create page</a>
+        </div>
+        <div id="content">
+            <div id="viewContent"></div>
+            <div id="editForm">
+                <input type="text" id="pageTitle" placeholder="Page title">
+                <textarea id="pageContent" placeholder="Page content"></textarea>
+                <div class="edit-buttons">
+                    <button onclick="savePage()">Save page</button>
+                    <button class="cancel" onclick="cancelEdit()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function initializeWiki() {
+            if (!localStorage.getItem('wikiPages')) {
+                localStorage.setItem('wikiPages', JSON.stringify({
+                    'Main Page': 'Welcome to the Simple Wiki!\n\nThis is a lightweight wiki built with HTML and JavaScript, styled to resemble Wikimedia. You can create, edit, and view pages. All data is stored locally in your browser.\n\nTo get started:\n- Click [[Create page]] to add a new page.\n- Click [[All pages]] to see a list of existing pages.\n- Click any page title to view or edit it.'
+                }));
+            }
+            showMainPage();
+        }
+
+        function showMainPage() {
+            loadPage('Main Page');
+        }
+
+        function loadPage(title) {
+            const pages = JSON.parse(localStorage.getItem('wikiPages'));
+            const content = pages[title] || 'This page does not exist yet. <a href="#" onclick="showEditForm(\'' + title + '\')">Create it?</a>';
+            document.getElementById('viewContent').innerHTML = '<h1>' + title + '</h1>' + parseWikiText(content) + '<div id="editLink"><a href="#" onclick="showEditForm(\'' + title + '\')">Edit this page</a></div>';
+            document.getElementById('editForm').style.display = 'none';
+        }
+
+        function listPages() {
+            const pages = JSON.parse(localStorage.getItem('wikiPages'));
+            let html = '<h1>All pages</h1><ul class="page-list">';
+            for (let title in pages) {
+                html += `<li><a href="#" onclick="loadPage('${title}')">${title}</a></li>`;
+            }
+            html += '</ul>';
+            document.getElementById('viewContent').innerHTML = html;
+            document.getElementById('editForm').style.display = 'none';
+        }
+
+        function showEditForm(title) {
+            const pages = JSON.parse(localStorage.getItem('wikiPages'));
+            document.getElementById('pageTitle').value = title === 'new' ? '' : title;
+            document.getElementById('pageContent').value = title === 'new' ? '' : (pages[title] || '');
+            document.getElementById('viewContent').style.display = 'none';
+            document.getElementById('editForm').style.display = 'block';
+        }
+
+        function savePage() {
+            const title = document.getElementById('pageTitle').value.trim();
+            const content = document.getElementById('pageContent').value;
+            if (!title) {
+                alert('Please enter a page title.');
+                return;
+            }
+            const pages = JSON.parse(localStorage.getItem('wikiPages'));
+            pages[title] = content;
+            localStorage.setItem('wikiPages', JSON.stringify(pages));
+            document.getElementById('viewContent').style.display = 'block';
+            document.getElementById('editForm').style.display = 'none';
+            loadPage(title);
+        }
+
+        function cancelEdit() {
+            document.getElementById('viewContent').style.display = 'block';
+            document.getElementById('editForm').style.display = 'none';
+            showMainPage();
+        }
+
+        function parseWikiText(text) {
+            let html = text
+                .replace(/\n/g, '<br>')
+                .replace(/\[\[([^\]]+)\]\]/g, (match, p1) => `<a href="#" onclick="loadPage('${p1}')">${p1}</a>`)
+                .replace(/'''([^']+)'''/g, '<b>$1</b>')
+                .replace(/''([^']+)''/g, '<i>$1</i>');
+            return html;
+        }
+
+        window.onload = initializeWiki;
+    </script>
+</body>
+</html>
